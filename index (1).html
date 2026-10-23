@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GIF library</title>
+<style>
+  :root {
+    --bg: #0a0b0e;
+    --panel: #0f1115;
+    --card: #13151a;
+    --line: #1e2129;
+    --text: #d9dae0;
+    --muted: #787d8c;
+    --accent: #7f8ef0;
+    --accent-ink: #11131c;
+    --danger: #ff8a91;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  button, input, select { font: inherit; color: inherit; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .app { display: grid; grid-template-columns: 250px 1fr; min-height: 100vh; }
+
+  /* Sidebar */
+  aside { background: var(--panel); border-right: 1px solid var(--line); padding: 16px 12px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  aside h1 { font-size: 17px; font-weight: 650; margin: 0 6px 14px; }
+  .cat { display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left; background: none; border: 0; border-radius: 6px; padding: 7px 10px; cursor: pointer; color: var(--muted); }
+  .cat:hover { background: #171a20; color: var(--text); }
+  .cat.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .cat .n { opacity: .7; font-variant-numeric: tabular-nums; }
+  .sep { height: 1px; background: var(--line); margin: 10px 6px; }
+  .newcat { display: flex; gap: 6px; margin: 10px 4px 0; }
+  .newcat input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+  .newcat button { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+  .newcat button:hover { border-color: var(--accent); }
+
+  /* Main */
+  main { padding: 16px 20px 40px; min-width: 0; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px; }
+  .bar h2 { font-size: 18px; margin: 0 auto 0 0; font-weight: 650; }
+  .bar h2 small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+  #q { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; width: 240px; max-width: 100%; }
+  .btn { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+  #msg { color: var(--muted); font-size: 13px; width: 100%; min-height: 1.2em; }
+
+  /* Grid: columns give a masonry layout for mixed GIF shapes */
+  #grid { columns: 210px; column-gap: 12px; }
+  figure { margin: 0 0 12px; break-inside: avoid; background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  figure img, figure video { display: block; width: 100%; height: auto; background: #060709; }
+  .missing { padding: 24px 12px; color: var(--danger); font-size: 13px; word-break: break-all; background: #060709; }
+  .meta { padding: 8px 10px 10px; }
+  .title { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chips { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; background: #1c1f27; border-radius: 999px; padding: 2px 4px 2px 9px; }
+  .chip button { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 0 4px; line-height: 1; }
+  .chip button:hover { color: var(--danger); }
+  select.add { margin-top: 6px; width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; font-size: 13px; color: var(--muted); }
+
+  .empty { color: var(--muted); padding: 40px 0; max-width: 46ch; }
+  #more { display: block; margin: 8px auto 0; }
+
+  @media (max-width: 760px) {
+    .app { grid-template-columns: 1fr; }
+    aside { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+    #cats { display: flex; flex-wrap: wrap; gap: 4px; }
+    .cat { width: auto; }
+    .sep { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <h1>GIF library</h1>
+    <div id="cats"></div>
+    <div class="sep"></div>
+    <form class="newcat" id="newcat">
+      <input id="newname" placeholder="New category" aria-label="New category name" maxlength="40">
+      <button type="submit">Add</button>
+    </form>
+  </aside>
+
+  <main>
+    <div class="bar">
+      <h2 id="heading">All GIFs</h2>
+      <input id="q" type="search" placeholder="Search by name" aria-label="Search by name">
+      <button class="btn" id="rename" hidden>Rename category</button>
+      <button class="btn danger" id="delete" hidden>Delete category</button>
+      <button class="btn" id="export">Download gifs.json</button>
+      <button class="btn" id="reset" title="Discard changes made in this browser and reload gifs.json">Reset local changes</button>
+      <div id="msg" role="status"></div>
+    </div>
+    <div id="grid"></div>
+    <button class="btn" id="more" hidden>Show more</button>
+  </main>
+</div>
+
+<script>
+const STORE = 'gif-library-v1';
+const PAGE = 120;
+const ALL = '__all', NONE = '__none';
+
+let categories = [];
+let gifs = [];            // { file, title, categories: [] }
+let view = ALL;
+let shown = PAGE;
+
+const $ = id => document.getElementById(id);
+const grid = $('grid'), catsEl = $('cats'), msg = $('msg');
+
+function say(t) { msg.textContent = t; if (t) setTimeout(() => { if (msg.textContent === t) msg.textContent = ''; }, 4000); }
+
+/* ---------- persistence ---------- */
+function save() {
+  try {
+    localStorage.setItem(STORE, JSON.stringify({
+      categories,
+      assign: Object.fromEntries(gifs.map(g => [g.file, g.categories]))
+    }));
+  } catch (e) {}
+}
+function loadSaved() {
+  try { return JSON.parse(localStorage.getItem(STORE)); } catch (e) { return null; }
+}
+
+/* ---------- category helpers ---------- */
+function findCat(name) { return categories.find(c => c.toLowerCase() === name.toLowerCase()); }
+
+function addCategory(raw) {
+  const name = (raw || '').trim();
+  if (!name) return null;
+  const existing = findCat(name);
+  if (existing) return existing;
+  categories.push(name);
+  categories.sort((a, b) => a.localeCompare(b));
+  return name;
+}
+
+function countFor(key) {
+  if (key === ALL) return gifs.length;
+  if (key === NONE) return gifs.filter(g => !g.categories.length).length;
+  return gifs.filter(g => g.categories.includes(key)).length;
+}
+
+/* ---------- rendering ---------- */
+function renderSidebar() {
+  catsEl.innerHTML = '';
+  const make = (key, label) => {
+    const b = document.createElement('button');
+    b.className = 'cat' + (view === key ? ' on' : '');
+    b.innerHTML = '<span></span><span class="n"></span>';
+    b.children[0].textContent = label;
+    b.children[1].textContent = countFor(key);
+    b.onclick = () => { view = key; shown = PAGE; render(); };
+    catsEl.appendChild(b);
+  };
+  make(ALL, 'All GIFs');
+  make(NONE, 'Uncategorized');
+  categories.forEach(c => make(c, c));
+}
+
+const io = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    const v = e.target;
+    if (e.isIntersecting) {
+      if (!v.src) v.src = v.dataset.src;
+      v.play().catch(() => {});
+    } else v.pause();
+  });
+}, { rootMargin: '200px' });
+
+function mediaFor(g) {
+  const url = 'gifs/' + encodeURIComponent(g.file);
+  if (/\.(mp4|webm)$/i.test(g.file)) {
+    const v = document.createElement('video');
+    v.muted = true; v.loop = true; v.playsInline = true; v.preload = 'none';
+    v.dataset.src = url;
+    v.onerror = () => v.replaceWith(missing(g));
+    io.observe(v);
+    return v;
+  }
+  const img = new Image();
+  img.loading = 'lazy';
+  img.alt = g.title;
+  img.src = url;
+  img.onerror = () => img.replaceWith(missing(g));
+  return img;
+}
+
+function missing(g) {
+  const d = document.createElement('div');
+  d.className = 'missing';
+  d.textContent = 'Can\u2019t load gifs/' + g.file + '. Check the file name and that it is uploaded.';
+  return d;
+}
+
+function card(g) {
+  const f = document.createElement('figure');
+  f.appendChild(mediaFor(g));
+
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+
+  const t = document.createElement('div');
+  t.className = 'title';
+  t.textContent = g.title;
+  t.title = g.file;
+  meta.appendChild(t);
+
+  if (g.categories.length) {
+    const chips = document.createElement('div');
+    chips.className = 'chips';
+    g.categories.forEach(c => {
+      const s = document.createElement('span');
+      s.className = 'chip';
+      s.append(c);
+      const x = document.createElement('button');
+      x.textContent = '\u00d7';
+      x.title = 'Remove from ' + c;
+      x.setAttribute('aria-label', 'Remove from ' + c);
+      x.onclick = () => { g.categories = g.categories.filter(k => k !== c); save(); render(); };
+      s.appendChild(x);
+      chips.appendChild(s);
+    });
+    meta.appendChild(chips);
+  }
+
+  const sel = document.createElement('select');
+  sel.className = 'add';
+  sel.setAttribute('aria-label', 'Add ' + g.title + ' to a category');
+  sel.add(new Option('Add to category\u2026', ''));
+  categories.filter(c => !g.categories.includes(c)).forEach(c => sel.add(new Option(c, c)));
+  sel.add(new Option('New category\u2026', '__new'));
+  sel.onchange = () => {
+    let name = sel.value;
+    if (name === '__new') name = addCategory(prompt('New category name:'));
+    if (name && !g.categories.includes(name)) { g.categories.push(name); save(); }
+    render();
+  };
+  meta.appendChild(sel);
+
+  f.appendChild(meta);
+  return f;
+}
+
+function visible() {
+  const term = $('q').value.trim().toLowerCase();
+  return gifs.filter(g => {
+    if (view === NONE && g.categories.length) return false;
+    if (view !== ALL && view !== NONE && !g.categories.includes(view)) return false;
+    return !term || g.title.toLowerCase().includes(term) || g.file.toLowerCase().includes(term);
+  });
+}
+
+function render() {
+  if (view !== ALL && view !== NONE && !categories.includes(view)) view = ALL;
+  renderSidebar();
+
+  const custom = view !== ALL && view !== NONE;
+  $('rename').hidden = !custom;
+  $('delete').hidden = !custom;
+
+  const list = visible();
+  const label = view === ALL ? 'All GIFs' : view === NONE ? 'Uncategorized' : view;
+  $('heading').innerHTML = '<span></span><small></small>';
+  $('heading').children[0].textContent = label;
+  $('heading').children[1].textContent = list.length;
+
+  grid.innerHTML = '';
+  io.disconnect();
+  list.slice(0, shown).forEach(g => grid.appendChild(card(g)));
+  $('more').hidden = list.length <= shown;
+
+  if (!list.length) {
+    const e = document.createElement('div');
+    e.className = 'empty';
+    e.textContent = gifs.length
+      ? (custom ? 'Nothing in this category yet. Use the \u201cAdd to category\u201d menu on any GIF to put it here.' : 'No GIFs match.')
+      : 'No GIFs found. Add file names to gifs.json (run make_list.py after uploading to the gifs folder).';
+    grid.appendChild(e);
+  }
+}
+
+/* ---------- actions ---------- */
+$('newcat').onsubmit = e => {
+  e.preventDefault();
+  const name = addCategory($('newname').value);
+  $('newname').value = '';
+  if (name) { view = name; shown = PAGE; save(); render(); }
+};
+
+$('rename').onclick = () => {
+  const old = view;
+  const next = (prompt('Rename category:', old) || '').trim();
+  if (!next || next === old) return;
+  const clash = findCat(next);
+  if (clash && clash !== old) { say('A category called \u201c' + clash + '\u201d already exists.'); return; }
+  categories = categories.map(c => c === old ? next : c).sort((a, b) => a.localeCompare(b));
+  gifs.forEach(g => { g.categories = g.categories.map(c => c === old ? next : c); });
+  view = next; save(); render();
+};
+
+$('delete').onclick = () => {
+  const name = view;
+  if (!confirm('Delete the category \u201c' + name + '\u201d? The GIFs stay in your library.')) return;
+  categories = categories.filter(c => c !== name);
+  gifs.forEach(g => { g.categories = g.categories.filter(c => c !== name); });
+  view = ALL; save(); render();
+};
+
+$('export').onclick = () => {
+  const data = {
+    categories,
+    gifs: gifs.map(g => ({ file: g.file, title: g.title, categories: g.categories }))
+  };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }));
+  a.download = 'gifs.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  say('Downloaded. Replace gifs.json in your repo with it to make the categories permanent.');
+};
+
+$('reset').onclick = () => {
+  if (!confirm('Discard category changes made in this browser and reload from gifs.json?')) return;
+  try { localStorage.removeItem(STORE); } catch (e) {}
+  load();
+};
+
+$('more').onclick = () => { shown += PAGE; render(); };
+$('q').oninput = () => { shown = PAGE; render(); };
+
+/* ---------- load ---------- */
+function load() {
+  fetch('gifs.json', { cache: 'no-cache' })
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(data => {
+      const list = Array.isArray(data) ? data : (data.gifs || []);
+      const base = Array.isArray(data) ? [] : (data.categories || []);
+      const saved = loadSaved();
+
+      gifs = list.filter(g => g && g.file).map(g => ({
+        file: g.file,
+        title: g.title || g.file.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' '),
+        categories: (saved && saved.assign && g.file in saved.assign)
+          ? saved.assign[g.file].slice()
+          : (g.categories || []).slice()
+      }));
+
+      const names = new Set(saved ? saved.categories : base);
+      gifs.forEach(g => g.categories.forEach(c => names.add(c)));
+      categories = [...names].sort((a, b) => a.localeCompare(b));
+
+      view = ALL; shown = PAGE;
+      render();
+    })
+    .catch(() => {
+      gifs = []; categories = [];
+      render();
+      grid.innerHTML = '';
+      const e = document.createElement('div');
+      e.className = 'empty';
+      e.textContent = 'Couldn\u2019t load gifs.json. Open this page through GitHub Pages (or run python -m http.server locally); opening the file directly won\u2019t work.';
+      grid.appendChild(e);
+    });
+}
+load();
+</script>
+</body>
+</html>
