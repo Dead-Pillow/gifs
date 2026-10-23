@@ -92,8 +92,7 @@
       <input id="q" type="search" placeholder="Search by name" aria-label="Search by name">
       <button class="btn" id="rename" hidden>Rename category</button>
       <button class="btn danger" id="delete" hidden>Delete category</button>
-      <button class="btn" id="export">Download gifs.json</button>
-      <button class="btn" id="reset" title="Discard changes made in this browser and reload gifs.json">Reset local changes</button>
+      <button class="btn danger" id="reset" title="Remove every category you made in this browser">Clear categories</button>
       <div id="msg" role="status"></div>
     </div>
     <div id="grid"></div>
@@ -314,21 +313,8 @@ $('delete').onclick = () => {
   view = ALL; save(); render();
 };
 
-$('export').onclick = () => {
-  const data = {
-    categories,
-    gifs: gifs.map(g => ({ file: g.file, title: g.title, categories: g.categories }))
-  };
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }));
-  a.download = 'gifs.json';
-  a.click();
-  URL.revokeObjectURL(a.href);
-  say('Downloaded. Replace gifs.json in your repo with it to make the categories permanent.');
-};
-
 $('reset').onclick = () => {
-  if (!confirm('Discard category changes made in this browser and reload from gifs.json?')) return;
+  if (!confirm('Remove all categories you made in this browser? The GIFs themselves are not affected.')) return;
   try { localStorage.removeItem(STORE); } catch (e) {}
   load();
 };
@@ -369,56 +355,37 @@ async function listFolder() {
   return null;
 }
 
-async function readJson() {
-  try {
-    const r = await fetch('gifs.json', { cache: 'no-cache' });
-    if (!r.ok) return null;
-    return await r.json();
-  } catch (e) { return null; }
-}
-
 async function load() {
-  const [data, folder] = await Promise.all([readJson(), listFolder()]);
+  const folder = await listFolder();
 
-  if (!data && !folder) {
+  if (!folder) {
     gifs = []; categories = [];
     render();
     grid.innerHTML = '';
     const e = document.createElement('div');
     e.className = 'empty';
-    e.textContent = 'Couldn\u2019t read gifs.json or list the gifs folder. Open this page through GitHub Pages (or run python -m http.server locally and keep a gifs.json); opening the file directly won\u2019t work.';
+    e.textContent = 'Couldn\u2019t list the gifs folder. This page reads it from GitHub, so open it at your github.io address. If you\u2019ve reloaded many times in the last hour, GitHub may be limiting requests; try again later.';
     grid.appendChild(e);
     return;
   }
 
-  const list = !data ? [] : Array.isArray(data) ? data : (data.gifs || []);
-  const base = data && !Array.isArray(data) ? (data.categories || []) : [];
   const saved = loadSaved();
 
-  const entries = new Map(list.filter(g => g && g.file).map(g => [g.file, g]));
-  if (folder) {
-    const onDisk = new Set(folder.files);
-    folder.files.forEach(f => { if (!entries.has(f)) entries.set(f, { file: f }); });
-    [...entries.keys()].forEach(f => { if (!onDisk.has(f)) entries.delete(f); });
-  }
-
-  gifs = [...entries.values()]
-    .sort((a, b) => a.file.localeCompare(b.file, undefined, { numeric: true }))
-    .map(g => ({
-      file: g.file,
-      title: g.title || autoTitle(g.file),
-      categories: (saved && saved.assign && g.file in saved.assign)
-        ? saved.assign[g.file].slice()
-        : (g.categories || []).slice()
+  gifs = folder.files
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    .map(f => ({
+      file: f,
+      title: autoTitle(f),
+      categories: (saved && saved.assign && saved.assign[f]) ? saved.assign[f].slice() : []
     }));
 
-  const names = new Set(saved ? saved.categories : base);
+  const names = new Set(saved ? saved.categories : []);
   gifs.forEach(g => g.categories.forEach(c => names.add(c)));
   categories = [...names].sort((a, b) => a.localeCompare(b));
 
   view = ALL; shown = PAGE;
   render();
-  if (folder && folder.truncated) say('The folder listing was cut off by GitHub, so some files may be missing.');
+  if (folder.truncated) say('The folder listing was cut off by GitHub, so some files may be missing.');
 }
 load();
 </script>
